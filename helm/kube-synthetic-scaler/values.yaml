@@ -1,0 +1,30 @@
+serviceAccount: kubesyntheticscaler-service-account
+name: kube-synthetic-scaler
+servicename: kube-synthetic-scaler
+namespace: scaler
+containername: manager
+reconcilerFlags:
+  scalingSignalAnnotation: "synthetic-scaler.salesforce.com/enable"
+  scalingDurationAnnotation: "synthetic-scaler.salesforce.com/duration"
+  lastUpdateTimeAnnotation: "synthetic-scaler.salesforce.com/lastUpdateTime"
+  scaleUpReplicaCountAnnotation: "synthetic-scaler.salesforce.com/replicaCount"
+resources: {}
+livenessprobe:
+  enabled: true
+  initialDelaySeconds: 50
+  periodSeconds: 25
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+  port: 3000
+service:
+  port: 80
+  targetPort: 9376
+  type: ClusterIP
+image:
+  tag: latest
+  repository: salesforce/kube-synthetic-scaler
+  pullPolicy: IfNotPresent
+sidecars: []
+deployment:
+  annotations: {}
