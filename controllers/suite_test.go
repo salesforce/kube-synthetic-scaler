@@ -107,15 +107,16 @@ func SetupTest(ctx context.Context) *core.Namespace {
 		listener := livenessprobe.NewLivenessProbeListener("some path", "1234", time.Minute*3, logf.Log)
 
 		controller := &DeploymentReconciler{
-			Client:                    mgr.GetClient(),
-			Log:                       logf.Log,
-			LivenessProbe:             listener,
-			Clock:                     clock.NewFakeClock(time.Date(2000, 1, 1, 1, 1, 0, 0, time.UTC)),
-			DefaultScalingInterval:    2 * time.Minute,
-			ScalingSignalAnnotation:   scalingSignalAnnotation,
-			ScalingDurationAnnotation: scalingDurationAnnotation,
-			LastUpdateTimeAnnotation:  lastUpdateTimeAnnotation,
-			MaxConcurrentReconciles:   20,
+			Client:                        mgr.GetClient(),
+			Log:                           logf.Log,
+			LivenessProbe:                 listener,
+			Clock:                         clock.NewFakeClock(time.Date(2000, 1, 1, 1, 1, 0, 0, time.UTC)),
+			DefaultScalingInterval:        2 * time.Minute,
+			ScalingSignalAnnotation:       scalingSignalAnnotation,
+			ScalingDurationAnnotation:     scalingDurationAnnotation,
+			LastUpdateTimeAnnotation:      lastUpdateTimeAnnotation,
+			ScaleUpReplicaCountAnnotation: scaleUpReplicaCountAnnotation,
+			MaxConcurrentReconciles:       20,
 		}
 
 		err = controller.SetupWithManager(mgr)
