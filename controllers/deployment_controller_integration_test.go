@@ -24,9 +24,10 @@ import (
 
 // Default values for the names of annotations in deployments
 const (
-	scalingSignalAnnotation   string = "synthetic-scaler.salesforce.com/enable"
-	scalingDurationAnnotation string = "synthetic-scaler.salesforce.com/duration"
-	lastUpdateTimeAnnotation  string = "synthetic-scaler.salesforce.com/lastUpdateTime"
+	scalingSignalAnnotation       string = "synthetic-scaler.salesforce.com/enable"
+	scalingDurationAnnotation     string = "synthetic-scaler.salesforce.com/duration"
+	lastUpdateTimeAnnotation      string = "synthetic-scaler.salesforce.com/lastUpdateTime"
+	scaleUpReplicaCountAnnotation string = "synthetic-scaler.salesforce.com/replicaCount"
 )
 
 var (
