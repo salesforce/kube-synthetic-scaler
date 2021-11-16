@@ -1,5 +1,7 @@
 # kube-synthetic-scaler
 
+![Main Branch Build Status](https://github.com/salesforce/kube-synthetic-scaler/actions/workflows/docker-image.yaml/badge.svg)
+
 This is a Kubernetes controller that scales deployments up and down.
 
 ### How it Works
