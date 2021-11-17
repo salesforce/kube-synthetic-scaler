@@ -16,11 +16,25 @@ Make sure you have [kubectl](https://kubernetes.io/docs/tasks/tools/) and [Helm]
 
 ### To run locally
 
-1. You can choose between several options for running kube-synthetic-scaler:
-    - To run the Go binary locally, run `make run`
-    - To run using Docker image + Helm chart, run `make install-chart`
-    - If using minikube, to run using local Docker image + Helm chart, run `eval $(minikube docker-env)`, then `make docker-build install-chart`
-2. kube-synthetic-scaler will operate on the current context according to your kubeconfig file.
+You can choose between several options for running kube-synthetic-scaler:
+- To run the Go binary locally on your kubeconfig's current context:
+  ```
+  make run
+  ```
+- To install a Helm chart on your kubeconfig's current context using the [Docker Hub image](https://hub.docker.com/r/salesforce/kube-synthetic-scaler):
+  ```
+  helm upgrade --install kube-synthetic-scaler helm/kube-synthetic-scaler --namespace <namespace>
+  ```
+  Note that this assumes the given namespace already exists within the cluster.
+- If using minikube (e.g. for testing), to run using local Docker image + Helm chart:
+  ```
+  minikube start
 
-### To uninstall Helm chart:
-1. Run `make uninstall-chart`
+  eval $(minikube docker-env)
+
+  make docker-build
+
+  helm upgrade --install kube-synthetic-scaler helm/kube-synthetic-scaler --namespace <namespace>
+  ```
+
+To uninstall the kube-synthetic-scaler Helm chart afterwards, run `helm uninstall kube-synthetic-scaler --namespace <namespace>`

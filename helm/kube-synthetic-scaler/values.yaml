@@ -1,7 +1,6 @@
 serviceAccount: kubesyntheticscaler-service-account
 name: kube-synthetic-scaler
 servicename: kube-synthetic-scaler
-namespace: scaler
 containername: manager
 reconcilerFlags:
   scalingSignalAnnotation: "synthetic-scaler.salesforce.com/enable"
