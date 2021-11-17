@@ -3,8 +3,6 @@
 IMG ?= salesforce/kube-synthetic-scaler:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
-# Default release name for use with Helm
-RELEASE_NAME_HELM ?= "kube-synthetic-scaler"
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -30,13 +28,6 @@ manager: generate fmt vet
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet
 	go run ./main.go
-
-# Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-install-chart:
-	helm upgrade --install ${RELEASE_NAME_HELM} helm/kube-synthetic-scaler
-
-uninstall-chart:
-	helm uninstall ${RELEASE_NAME_HELM}
 
 # Run go fmt against code
 fmt:
