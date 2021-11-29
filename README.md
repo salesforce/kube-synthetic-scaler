@@ -26,15 +26,9 @@ You can choose between several options for running kube-synthetic-scaler:
   helm upgrade --install kube-synthetic-scaler helm/kube-synthetic-scaler --namespace <namespace>
   ```
   Note that this assumes the given namespace already exists within the cluster.
-- If using minikube (e.g. for testing), to run using local Docker image + Helm chart:
+  
+  To uninstall the kube-synthetic-scaler Helm chart afterwards, run `helm uninstall kube-synthetic-scaler --namespace <namespace>`
+- To build a local Docker image (defaulting to the "salesforce/kube-synthetic-scaler:latest" tag) for testing code changes, simply run:
   ```
-  minikube start
-
-  eval $(minikube docker-env)
-
   make docker-build
-
-  helm upgrade --install kube-synthetic-scaler helm/kube-synthetic-scaler --namespace <namespace>
   ```
-
-To uninstall the kube-synthetic-scaler Helm chart afterwards, run `helm uninstall kube-synthetic-scaler --namespace <namespace>`
