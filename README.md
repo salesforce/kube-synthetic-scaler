@@ -21,7 +21,7 @@ You can choose between several options for running kube-synthetic-scaler:
   ```
   make run
   ```
-- To install a Helm chart on your kubeconfig's current context using the [Docker Hub image](https://hub.docker.com/r/salesforce/kube-synthetic-scaler):
+- To install a Helm chart on your kubeconfig's current context using Helm 3 and the [Docker Hub image](https://hub.docker.com/r/salesforce/kube-synthetic-scaler):
   ```
   helm upgrade --install kube-synthetic-scaler helm/kube-synthetic-scaler --namespace <namespace>
   ```
