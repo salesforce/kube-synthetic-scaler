@@ -5,7 +5,7 @@ WORKDIR /workspace
 # Copy the Source code
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod vendor -a -o manager main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o manager main.go
 
 # Build
 FROM gcr.io/distroless/base
