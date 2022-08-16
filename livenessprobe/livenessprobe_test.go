@@ -1,3 +1,4 @@
+//go:build unit
 // +build unit
 
 /*
@@ -16,20 +17,16 @@ import (
 
 	"net/http"
 
-	"github.com/go-logr/logr"
-	logrtest "github.com/go-logr/logr/testing"
-
+	"github.com/go-logr/logr/testr"
 	"github.com/stretchr/testify/assert"
 )
 
 var staticTime = time.Date(1, 1, 1, 1, 1, 1, 1, time.UTC)
 var oneHourLater = staticTime.Add(time.Hour * 1)
 
-var nullLogr logr.Logger = logrtest.NullLogger{}
-
 func Test_Pulse_UpdatesMostRecentPulse(t *testing.T) {
 	getTimeFunc = func() time.Time { return staticTime }
-	listener := NewLivenessProbeListener("some path", "1234", time.Second*1, nullLogr)
+	listener := NewLivenessProbeListener("some path", "1234", time.Second*1, testr.New(t))
 	getTimeFunc = func() time.Time { return oneHourLater }
 	listener.Pulse()
 	assert.Equal(t, oneHourLater, listener.lastReportTime)
@@ -37,7 +34,7 @@ func Test_Pulse_UpdatesMostRecentPulse(t *testing.T) {
 
 func Test_RespondToProbeWrapper_ReturnsOk(t *testing.T) {
 	getTimeFunc = func() time.Time { return staticTime }
-	listener := NewLivenessProbeListener("/healthz", "9001", time.Hour*5, nullLogr)
+	listener := NewLivenessProbeListener("/healthz", "9001", time.Hour*5, testr.New(t))
 	getTimeFunc = func() time.Time { return oneHourLater }
 	w := httptest.NewRecorder()
 
@@ -48,7 +45,7 @@ func Test_RespondToProbeWrapper_ReturnsOk(t *testing.T) {
 
 func Test_RespondToProbeWrapper_ReturnsError(t *testing.T) {
 	getTimeFunc = func() time.Time { return staticTime }
-	listener := NewLivenessProbeListener("some path", "1234", time.Second*1, nullLogr)
+	listener := NewLivenessProbeListener("some path", "1234", time.Second*1, testr.New(t))
 	getTimeFunc = func() time.Time { return oneHourLater }
 	w := httptest.NewRecorder()
 

@@ -51,12 +51,14 @@ var (
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments/status,verbs=get;update;patch
 
-func (r *DeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *DeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	startTime := r.Clock.Now()
-	ctx := context.Background()
 	log := r.Log
-	// Make into separate functions and add tests
-	// Maybe create CRD to store when last updated and result etc
+	// send a pulse to avoid liveness probe failing at least once per reconciliation loop.
+	defer r.LivenessProbe.Pulse()
+
+	// TODO Make into separate functions and add tests
+	// TODO Maybe create CRD to store when last updated and result etc
 
 	// 1. Get Deployment object
 	var deployment appsv1.Deployment
@@ -67,71 +69,66 @@ func (r *DeploymentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) 
 		// on deleted requests.
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-	// 2. Check if Deployment has the annotation we are looking for
-	scalingSignal, ok := checkForAnnotation(deployment, r.ScalingSignalAnnotation)
 
-	// If Deployment does not have annotation, send a pulse to avoid livenessprobe failing
-	if !ok {
-		log.Info("This deployment does not have scaling annotation", "deployment", req.NamespacedName)
-		r.LivenessProbe.Pulse()
-	} else if ok && scalingSignal == "true" {
-		log.Info("This deployment has scaling annotation", "deployment", req.NamespacedName)
-		lastUpdateTime, _ := time.Parse(time.RFC822Z, deployment.Annotations[r.LastUpdateTimeAnnotation])
-		scalingInterval, err := r.getScalingInterval(deployment)
+	// 2. Check if Deployment has the annotation we are looking for
+	scalingSignal, _ := r.checkForAnnotation(deployment, r.ScalingSignalAnnotation)
+
+	if scalingSignal != "true" {
+		return ctrl.Result{}, nil
+	}
+	// If Deployment has annotation
+	lastUpdateTime, _ := time.Parse(time.RFC822Z, deployment.Annotations[r.LastUpdateTimeAnnotation])
+	scalingInterval, err := r.getScalingInterval(deployment)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	timeSinceLastUpdate := time.Since(lastUpdateTime)
+	log.Info("", "KubeSyntheticScaler", req.NamespacedName, "Was last updated mins ago", timeSinceLastUpdate)
+
+	// 4. If it's been more than n minutes since update scale up and down
+	if timeSinceLastUpdate > scalingInterval {
+		log.Info("", "KubeSyntheticScaler", req.NamespacedName, "Time since last update", timeSinceLastUpdate, "is more than scaling interval", scalingInterval)
+		// 6. Scale down by doing a patch to 0 replica
+		replicaCount := r.getScaleToReplicaCount(deployment)
+		err := r.scaleDeployment(ctx, log, deployment, replicaZero, &replicaCount)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		timeSinceLastUpdate := time.Since(lastUpdateTime)
-		log.Info("", "KubeSyntheticScaler", req.NamespacedName, "Was last updated mins ago", timeSinceLastUpdate)
-		// 4. If it's been more than n mins since update scale up and down
+		// Metric for number of scale downs partitioned by namespaced deployment
+		metrics.ScalerScaleDownCount.WithLabelValues(req.NamespacedName.Namespace, req.NamespacedName.Name).Inc()
+		log.Info("", "KubeSyntheticScaler", req.NamespacedName, "was scaled down to 0 replicas", "")
 
-		if timeSinceLastUpdate > scalingInterval {
-			log.Info("", "KubeSyntheticScaler", req.NamespacedName, "Time since last update", timeSinceLastUpdate, "is more than scaling interval", scalingInterval)
-			// 6. Scale down by doing a patch to 0 replica
-			replicaCount := r.getScaleToReplicaCount(deployment)
-			err := r.scaleDeployment(ctx, log, deployment, replicaZero, &replicaCount)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			// Metric for number of scale downs partitioned by namespaced deployment
-			metrics.ScalerScaleDownCount.WithLabelValues(req.NamespacedName.Namespace, req.NamespacedName.Name).Inc()
-			log.Info("", "KubeSyntheticScaler", req.NamespacedName, "was scaled down to 0 replicas", "")
+		time.Sleep(2 * time.Second)
 
-			time.Sleep(2 * time.Second)
-
-			// 6. Scale up by doing a patch to the previous number of replicas
-			if err := r.Get(ctx, req.NamespacedName, &deployment); err != nil {
-				log.Error(err, "unable to fetch deployment")
-				// we'll ignore not-found errors, since they can't be fixed by an immediate
-				// requeue (we'll need to wait for a new notification), and we can get them
-				// on deleted requests.
-				return ctrl.Result{}, client.IgnoreNotFound(err)
-			}
-			err = r.scaleDeployment(ctx, log, deployment, replicaCount, nil)
-			if err != nil {
-				return ctrl.Result{}, err
-			}
-			// check if deployment is available after scale up within maxScaleUpTime
-			availability, err := r.getDeploymentStatusWithDeadline(ctx, log, req.NamespacedName.Namespace, req.NamespacedName.Name)
-			if err != nil {
-				log.Info("This deployment is not available after scale up", "deployment", req.NamespacedName, "availability", availability, "err", err)
-			} else {
-				log.Info("This deployment is available after scale up", "deployment", req.NamespacedName, "availability", availability)
-			}
-			// Metric that specifies if a deployment is available with desired replica count one minute after scale up
-			metrics.DeploymentAvailability.WithLabelValues(req.NamespacedName.Namespace, req.NamespacedName.Name).Set(availability)
-			// Metric for number of scale ups partitioned by namespaced deployment
-			metrics.ScalerScaleUpCount.WithLabelValues(req.NamespacedName.Namespace, req.NamespacedName.Name).Inc()
-			r.LivenessProbe.Pulse()
-			log.Info("", "KubeSyntheticScaler", req.NamespacedName, fmt.Sprintf("was scaled up to %d replica", replicaCount), "")
-		} else {
-			// If the scalingInterval has not been reached, send a pulse to avoid livenessprobe failing
-			r.LivenessProbe.Pulse()
+		// 6. Scale up by doing a patch to the previous number of replicas
+		if err := r.Get(ctx, req.NamespacedName, &deployment); err != nil {
+			log.Error(err, "unable to fetch deployment")
+			// we'll ignore not-found errors, since they can't be fixed by an immediate
+			// requeue (we'll need to wait for a new notification), and we can get them
+			// on deleted requests.
+			return ctrl.Result{}, client.IgnoreNotFound(err)
 		}
-		timeTaken := time.Since(startTime).Seconds() * 1000
-		log.Info("Deployment reconciler has duration", "duration", timeTaken)
-		metrics.ScalerReconcilerDuration.Observe(timeTaken)
+		err = r.scaleDeployment(ctx, log, deployment, replicaCount, nil)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		// check if deployment is available after scale up within maxScaleUpTime
+		availability, err := r.getDeploymentStatusWithDeadline(ctx, log, req.NamespacedName.Namespace, req.NamespacedName.Name)
+		if err != nil {
+			log.Info("This deployment is not available after scale up", "deployment", req.NamespacedName, "availability", availability, "err", err)
+		} else {
+			log.Info("This deployment is available after scale up", "deployment", req.NamespacedName, "availability", availability)
+		}
+		// Metric that specifies if a deployment is available with desired replica count one minute after scale up
+		metrics.DeploymentAvailability.WithLabelValues(req.NamespacedName.Namespace, req.NamespacedName.Name).Set(availability)
+		// Metric for number of scale ups partitioned by namespaced deployment
+		metrics.ScalerScaleUpCount.WithLabelValues(req.NamespacedName.Namespace, req.NamespacedName.Name).Inc()
+
+		log.Info(fmt.Sprintf("Deployment was scaled up to %d replica", replicaCount), "deployment", req.NamespacedName)
 	}
+	timeTaken := time.Since(startTime).Seconds() * 1000
+	log.Info("Deployment reconciler has duration", "duration", timeTaken)
+	metrics.ScalerReconcilerDuration.Observe(timeTaken)
 
 	return ctrl.Result{}, nil
 }
@@ -146,8 +143,7 @@ func (r *DeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *DeploymentReconciler) getScalingInterval(deployment appsv1.Deployment) (time.Duration, error) {
 	var err error
 	scalingInterval := r.DefaultScalingInterval
-	if scalingDuration, ok := checkForAnnotation(deployment, r.ScalingDurationAnnotation); ok {
-		r.Log.Info("This deployment has scaling duration annotation", "deployment", deployment.Namespace+"/"+deployment.Name, "annotation", scalingDuration)
+	if scalingDuration, ok := r.checkForAnnotation(deployment, r.ScalingDurationAnnotation); ok {
 		scalingInterval, err = time.ParseDuration(scalingDuration)
 		if err != nil {
 			return scalingInterval, err
@@ -156,8 +152,13 @@ func (r *DeploymentReconciler) getScalingInterval(deployment appsv1.Deployment) 
 	return scalingInterval, nil
 }
 
-func checkForAnnotation(deployment appsv1.Deployment, annotation string) (string, bool) {
+func (r *DeploymentReconciler) checkForAnnotation(deployment appsv1.Deployment, annotation string) (string, bool) {
 	scalingSignal, ok := deployment.Annotations[annotation]
+	if !ok {
+		r.Log.Info("Deployment is missing annotation", "deployment", deployment.Name, "namespace", deployment.Namespace, "annotation", annotation)
+	} else {
+		r.Log.Info("Deployment contains annotation", "deployment", deployment.Name, "namespace", deployment.Namespace, "annotation", annotation)
+	}
 	return scalingSignal, ok
 }
 
@@ -166,7 +167,7 @@ func checkForAnnotation(deployment appsv1.Deployment, annotation string) (string
 // deployment to zero but before it has time to scale it back up.
 func (r *DeploymentReconciler) getScaleToReplicaCount(deployment appsv1.Deployment) int32 {
 	var replicaCount int32
-	annotationReplicaCount, _ := getDeploymentAnnotationInt(deployment, r.ScaleUpReplicaCountAnnotation)
+	annotationReplicaCount, _ := r.getDeploymentAnnotationInt(deployment, r.ScaleUpReplicaCountAnnotation)
 	deploymentReplicaCount := deployment.Spec.Replicas
 
 	if deploymentReplicaCount != nil && *deploymentReplicaCount != 0 {
@@ -185,9 +186,9 @@ func (r *DeploymentReconciler) getScaleToReplicaCount(deployment appsv1.Deployme
 	return replicaCount
 }
 
-func getDeploymentAnnotationInt(deployment appsv1.Deployment, annotation string) (int32, error) {
+func (r *DeploymentReconciler) getDeploymentAnnotationInt(deployment appsv1.Deployment, annotation string) (int32, error) {
 	// Don't throw error if annotation doesn't exist. But do throw if the value exists and is illegal
-	if annotationValueStr, ok := checkForAnnotation(deployment, annotation); ok {
+	if annotationValueStr, ok := r.checkForAnnotation(deployment, annotation); ok {
 		annotationValueInt, err := strconv.Atoi(annotationValueStr)
 		return int32(annotationValueInt), err
 	}
