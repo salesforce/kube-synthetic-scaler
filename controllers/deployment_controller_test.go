@@ -1,3 +1,4 @@
+//go:build unit
 // +build unit
 
 /*
@@ -59,7 +60,8 @@ func Test_CheckForAnnotation_HasAnnotation(t *testing.T) {
 	for _, tc := range annotationTestCases {
 		t.Run(fmt.Sprintf("name %s and value %s", tc.annotationName, tc.annotationValue), func(t *testing.T) {
 			dummyDeploymentChart := getValidDeploymentChart(map[string]string{tc.annotationName: tc.annotationValue}, "test-deployment")
-			scalingSignal, _ := checkForAnnotation(dummyDeploymentChart, tc.annotationName)
+			controller := getController(&dummyDeploymentChart)
+			scalingSignal, _ := controller.checkForAnnotation(dummyDeploymentChart, tc.annotationName)
 			assert.Equal(t, tc.annotationValue, scalingSignal)
 		})
 	}
@@ -67,7 +69,8 @@ func Test_CheckForAnnotation_HasAnnotation(t *testing.T) {
 
 func Test_CheckForAnnotation_NoAnnotation(t *testing.T) {
 	dummyDeploymentChart := getValidDeploymentChart(nil, "test-deployment")
-	_, ok := checkForAnnotation(dummyDeploymentChart, scalingSignalAnnotation)
+	controller := getController(&dummyDeploymentChart)
+	_, ok := controller.checkForAnnotation(dummyDeploymentChart, scalingSignalAnnotation)
 	assert.Equal(t, false, ok)
 }
 
@@ -75,7 +78,8 @@ func Test_GetDeploymentAnnotation_AnnotationEqualOne(t *testing.T) {
 	replicaCount := int32(1)
 	namespacedName := types.NamespacedName{Name: "test-deployment1", Namespace: "test-namespace"}
 	dummyDeploymentChart := getValidDeploymentChart(map[string]string{scaleUpReplicaCountAnnotation: fmt.Sprint(replicaCount)}, namespacedName.Name)
-	value, err := getDeploymentAnnotationInt(dummyDeploymentChart, scaleUpReplicaCountAnnotation)
+	controller := getController(&dummyDeploymentChart)
+	value, err := controller.getDeploymentAnnotationInt(dummyDeploymentChart, scaleUpReplicaCountAnnotation)
 	assert.Equal(t, replicaCount, value)
 	assert.NoError(t, err)
 }
@@ -83,7 +87,8 @@ func Test_GetDeploymentAnnotation_AnnotationEqualOne(t *testing.T) {
 func Test_GetDeploymentAnnotation_NoAnnotation(t *testing.T) {
 	namespacedName := types.NamespacedName{Name: "test-deployment1", Namespace: "test-namespace"}
 	dummyDeploymentChart := getValidDeploymentChart(map[string]string{}, namespacedName.Name)
-	value, err := getDeploymentAnnotationInt(dummyDeploymentChart, scaleUpReplicaCountAnnotation)
+	controller := getController(&dummyDeploymentChart)
+	value, err := controller.getDeploymentAnnotationInt(dummyDeploymentChart, scaleUpReplicaCountAnnotation)
 	assert.Equal(t, int32(0), value)
 	assert.NoError(t, err)
 }
@@ -184,7 +189,7 @@ func Test_Reconciler_IgnoreDeploymentNotFoundErr(t *testing.T) {
 	incorrectNamespacedName := types.NamespacedName{Name: "nonexistent-deployment", Namespace: "test-namespace"}
 	dummyDeploymentChart := getValidDeploymentChart(map[string]string{scalingSignalAnnotation: "true"}, namespacedName.Name)
 	controller := getController(&dummyDeploymentChart)
-	_, err := controller.Reconcile(ctrl.Request{NamespacedName: incorrectNamespacedName})
+	_, err := controller.Reconcile(context.TODO(), ctrl.Request{NamespacedName: incorrectNamespacedName})
 	assert.NoError(t, err)
 }
 
@@ -192,7 +197,7 @@ func Test_Reconciler_NoAnnotation(t *testing.T) {
 	namespacedName := types.NamespacedName{Name: "test-deployment", Namespace: "test-namespace"}
 	dummyDeploymentChart := getValidDeploymentChart(nil, namespacedName.Name)
 	controller := getController(&dummyDeploymentChart)
-	_, err := controller.Reconcile(ctrl.Request{NamespacedName: namespacedName})
+	_, err := controller.Reconcile(context.TODO(), ctrl.Request{NamespacedName: namespacedName})
 	checkScaleUpDownValues(t, namespacedName, 0)
 	assert.NoError(t, err)
 }
@@ -202,7 +207,7 @@ func Test_Reconciler_ScalingIntervalReached(t *testing.T) {
 	dummyDeploymentChart := getValidDeploymentChart(map[string]string{scalingSignalAnnotation: "true"}, namespacedName.Name)
 	controller := getController(&dummyDeploymentChart)
 	checkScaleUpDownValues(t, namespacedName, 0)
-	_, err := controller.Reconcile(ctrl.Request{NamespacedName: namespacedName})
+	_, err := controller.Reconcile(context.TODO(), ctrl.Request{NamespacedName: namespacedName})
 	checkScaleUpDownValues(t, namespacedName, 1)
 	assert.NoError(t, err)
 }
@@ -213,7 +218,7 @@ func Test_Reconciler_ScalingIntervalNotReached(t *testing.T) {
 	dummyDeploymentChart := getValidDeploymentChart(annotations, namespacedName.Name)
 	controller := getController(&dummyDeploymentChart)
 	checkScaleUpDownValues(t, namespacedName, 0)
-	_, err := controller.Reconcile(ctrl.Request{NamespacedName: namespacedName})
+	_, err := controller.Reconcile(context.TODO(), ctrl.Request{NamespacedName: namespacedName})
 	checkScaleUpDownValues(t, namespacedName, 0)
 	assert.NoError(t, err)
 }
@@ -234,7 +239,7 @@ func Test_Reconciler_DeploymentAvailableAfterScaleUp(t *testing.T) {
 		CollisionCount:      nil,
 	}
 	controller := getController(&dummyDeploymentChart)
-	_, err := controller.Reconcile(ctrl.Request{NamespacedName: namespacedName})
+	_, err := controller.Reconcile(context.TODO(), ctrl.Request{NamespacedName: namespacedName})
 	assert.NoError(t, err)
 	collector, err := metrics.DeploymentAvailability.GetMetricWith(map[string]string{"ns": namespacedName.Namespace, "deployment": namespacedName.Name})
 	assert.NoError(t, err)
