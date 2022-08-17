@@ -19,7 +19,6 @@ import (
 	apps "k8s.io/api/apps/v1"
 	api "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -89,7 +88,7 @@ func validNewDeployment(namespace string) *apps.Deployment {
 	}
 }
 
-func getResourceFunc(ctx context.Context, key client.ObjectKey, obj runtime.Object) func() error {
+func getResourceFunc(ctx context.Context, key client.ObjectKey, obj client.Object) func() error {
 	return func() error {
 		return k8sClient.Get(ctx, key, obj)
 	}
