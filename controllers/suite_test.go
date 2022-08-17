@@ -23,6 +23,7 @@ import (
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/salesforce/kube-synthetic-scaler/livenessprobe"
 	"k8s.io/apimachinery/pkg/util/clock"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -32,8 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	"github.com/salesforce/kube-synthetic-scaler/livenessprobe"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -53,7 +52,7 @@ func TestAPIs(t *testing.T) {
 }
 
 var _ = BeforeSuite(func(done Done) {
-	logf.SetLogger(zap.LoggerTo(GinkgoWriter, true))
+	logf.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
@@ -90,11 +89,9 @@ var _ = AfterSuite(func() {
 // * stopping the 'MyKindReconciler" after the test ends
 // Call this function at the start of each of your tests.
 func SetupTest(ctx context.Context) *core.Namespace {
-	var stopCh chan struct{}
 	ns := &core.Namespace{}
 
 	BeforeEach(func() {
-		stopCh = make(chan struct{})
 		*ns = core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{Name: "testns-" + randStringRunes(5)},
 		}
@@ -124,14 +121,12 @@ func SetupTest(ctx context.Context) *core.Namespace {
 		Expect(err).NotTo(HaveOccurred(), "failed to setup controller")
 
 		go func() {
-			err := mgr.Start(stopCh)
+			err := mgr.Start(ctx)
 			Expect(err).NotTo(HaveOccurred(), "failed to start manager")
 		}()
 	})
 
 	AfterEach(func() {
-		close(stopCh)
-
 		err := k8sClient.Delete(ctx, ns)
 		Expect(err).NotTo(HaveOccurred(), "failed to delete test deploymentNamespace")
 	})
