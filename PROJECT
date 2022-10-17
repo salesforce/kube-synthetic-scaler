@@ -1,0 +1,3 @@
+domain: salesforce.com
+repo: github.com/salesforce/kube-synthetic-scaler
+version: "2"
